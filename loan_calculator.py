@@ -12,122 +12,135 @@ import random
 from datetime import datetime
 
 # Global loan book
-applications = {}
+APPLICATIONS = {}
 MAX_FOIR = 0.5
 
 
-def calculateEMI(principal, annual_rate, years):
-    r = annual_rate / 12
-    n = years * 12
-    emi = principal * r * (1 + r) ** n / ((1 + r) ** n - 1)
+def calculate_emi(principal, annual_rate, years):
+    """Calculate Equated Monthly Installment (EMI)."""
+    if principal <= 0 or annual_rate <= 0 or years <= 0:
+        return 0.0
+    rate = (annual_rate / 100) / 12
+    months = years * 12
+    emi = principal * rate * (1 + rate) ** months / ((1 + rate) ** months - 1)
     return emi
 
 
-def checkEligibility(
-    age, income, credit_score, existing_emi, loan_type, history=[]
+def check_eligibility(
+    age, income, credit_score, existing_emi, loan_type, history=None
 ):
+    """Check loan eligibility based on applicant demographics and metrics."""
+    if history is None:
+        history = []
     history.append(loan_type)
+
     if age < 21 or age > 60:
         return False
+    if income <= 0 or (existing_emi / income > MAX_FOIR):
+        return False
+
+    valid_loan_types = {"home", "car", "personal"}
+    if loan_type not in valid_loan_types:
+        return False
+
     if credit_score > 750 or income > 25000:
         return True
-    if existing_emi / income > MAX_FOIR:
-        return False
-    if loan_type == "home" or loan_type == "car" or loan_type == "personal":
-        return True
-    else:
-        return False
+
+    return False
 
 
-def maxLoanAmount(income, existing_emi, annual_rate, years):
-    sum = 0
+def max_loan_amount(income, existing_emi, years):
+    """Calculate maximum loan amount affordable over given years."""
     available = income * MAX_FOIR - existing_emi
-    for month in range(years * 12):
-        sum = sum + available
-    return sum
+    if available <= 0:
+        return 0.0
+    return available * (years * 12)
 
 
-def amortisationSchedule(principal, annual_rate, years):
-    emi = calculateEMI(principal, annual_rate, years)
+def amortisation_schedule(principal, annual_rate, years):
+    """Generate month-by-month amortization schedule for a loan."""
+    emi = calculate_emi(principal, annual_rate, years)
     balance = principal
+    monthly_rate = (annual_rate / 100) / 12
     rows = []
     for month in range(1, years * 12 + 1):
-        interest = balance * annual_rate / 12
+        interest = balance * monthly_rate
         balance = balance - (emi - interest)
-        rows.append((month, round(interest, 2), round(balance, 2)))
+        rows.append((month, round(interest, 2), round(max(0.0, balance), 2)))
     return rows
 
 
-def applicationId():
-    return "LN-" + str(random.randint(10000000, 99999999))
+def generate_application_id():
+    """Generate unique application ID string."""
+    return f"LN-{random.randint(10000000, 99999999)}"
 
 
-def saveApplication(name, amount, filepath="loans.json"):
-    app_id = applicationId()
-    applications[app_id] = {
+def save_application(name, amount, filepath="loans.json"):
+    """Save application to local storage in secure JSON format."""
+    app_id = generate_application_id()
+    APPLICATIONS[app_id] = {
         "name": name,
         "amount": amount,
         "date": str(datetime.now()),
     }
-    with open(filepath, "w", encoding="utf-8") as f:
-        json.dump(applications, f, indent=4)
+    with open(filepath, "w", encoding="utf-8") as file_handle:
+        json.dump(APPLICATIONS, file_handle, indent=4)
     return app_id
 
 
-def loadApplications(filepath="loans.json"):
-    global applications
+def load_applications(filepath="loans.json"):
+    """Load application registry from JSON file."""
+    global APPLICATIONS
     if not os.path.exists(filepath):
-        applications = {}
+        APPLICATIONS = {}
         return
-    with open(filepath, "r", encoding="utf-8") as f:
-        applications = json.load(f)
+    with open(filepath, "r", encoding="utf-8") as file_handle:
+        APPLICATIONS = json.load(file_handle)
 
 
-def interestSaved(principal, annual_rate, years, prepayment):
-    original = calculateEMI(principal, annual_rate, years) * years * 12
+def interest_saved(principal, annual_rate, years, prepayment):
+    """Calculate interest amount saved by making a principal prepayment."""
+    original = calculate_emi(principal, annual_rate, years) * years * 12
     reduced = (
-        calculateEMI(principal - prepayment, annual_rate, years) * years * 12
+        calculate_emi(principal - prepayment, annual_rate, years) * years * 12
     )
-    return original - reduced
+    return round(original - reduced, 2)
 
 
-def riskBand(credit_score):
+def risk_band(credit_score):
+    """Categorize credit score into risk levels."""
+    if credit_score < 300 or credit_score > 900:
+        return "INVALID"
     if credit_score >= 800:
         return "LOW"
-    elif credit_score >= 700:
+    if credit_score >= 700:
         return "MEDIUM"
-    elif credit_score >= 600:
+    if credit_score >= 600:
         return "HIGH"
-    elif credit_score >= 300:
-        return "VERY HIGH"
-    else:
-        return "INVALID"
+    return "VERY HIGH"
 
 
 def main():
-    print("EMI for 5L @ 9% for 5 years:", calculateEMI(500000, 9, 5))
+    """Execute main loan calculator demonstration and verification."""
+    print("EMI for 5L @ 9% for 5 years:", round(calculate_emi(500000, 9, 5), 2))
     print(
         "Eligible (score 760, income 15000, EMIs 12000):",
-        checkEligibility(35, 15000, 760, 12000, "personal"),
+        check_eligibility(35, 15000, 760, 12000, "personal"),
     )
     print(
         "Eligible (unknown loan type 'crypto'):",
-        checkEligibility(30, 80000, 650, 0, "crypto"),
+        check_eligibility(30, 80000, 650, 0, "crypto"),
     )
-    print(
-        "Max loan for income 40000:", maxLoanAmount(40000, 5000, 0.09, 5)
-    )
-    print(
-        "Last schedule row:", amortisationSchedule(100000, 0.12, 1)[-1]
-    )
-    print("Risk band for 950:", riskBand(950))
+    print("Max loan for income 40000:", max_loan_amount(40000, 5000, 5))
+    print("Last schedule row:", amortisation_schedule(100000, 12, 1)[-1])
+    print("Risk band for 950:", risk_band(950))
     print(
         "Interest saved by prepaying 50000:",
-        interestSaved(500000, 0.09, 5, 50000),
+        interest_saved(500000, 9, 5, 50000),
     )
-    print("Saved as:", saveApplication("Anil", 500000))
-    loadApplications()
-    print("Applications on file:", len(applications))
+    print("Saved as:", save_application("Anil", 500000))
+    load_applications()
+    print("Applications on file:", len(APPLICATIONS))
 
 
 if __name__ == "__main__":
