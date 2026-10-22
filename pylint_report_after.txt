@@ -1,0 +1,2 @@
+﻿************* Module loan_calcator.py
+loan_calcator.py:1:0: F0001: No module named loan_calcator.py (fatal)

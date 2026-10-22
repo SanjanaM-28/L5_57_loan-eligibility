@@ -1,0 +1,1 @@
+﻿loan_calcator.py:0:1: E902 FileNotFoundError: [Errno 2] No such file or directory: 'loan_calcator.py'
